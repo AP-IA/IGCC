@@ -1,0 +1,44 @@
+# -------------------------- Data Configuration --------------------------
+dataset: 'Cars'                # Dataset name
+data_path: './data/Cars'  # Dataset path
+txt_dir: './data/car/'         # Label file directory
+num_classes: 196               # Number of classes
+num_workers: 4                 # Number of data loading workers
+
+# -------------------------- Model Configuration --------------------------
+load_pretrained: True
+model_arch: swin-base-224
+img_size: 224                  # Image size
+window_size: 7                 # Window size
+drop_rate: 0.2                 # Dropout rate
+pruning_loc: [0, 0, 6, 0]      # Pruning location
+keep_rate: [1, 1, 0.5, 1]      # Pruning keep rate
+#pruning_loc: [0, 0, 4, 0]     # using swin-tiny
+#keep_rate: [1, 1, 0.5, 1]
+
+# -------------------------- Training Configuration --------------------------
+output_dir: './save'           # Output directory
+epochs: 150                    # Training epochs
+sample_classes: 2              # Number of sampled classes per iteration
+sample_images: 10              # Number of sampled images per class
+log_step: 50                   # Log printing step
+use_amp: True                  # Whether to use AMP mixed precision
+
+# Optimizer parameters
+backbone_lr: 1e-5              # Backbone learning rate
+others_lr: 5e-5                # Other layers learning rate
+betas: [0.9, 0.999]            # AdamW betas parameters
+weight_decay: 0.01             # Weight decay
+warmup_epochs: 10              # Warmup epochs
+
+# Loss function parameters
+ratio_weight: 10               # Dynamic loss weight
+rank_loss_margin: 0.05         # Rank loss margin
+
+# Local branch parameters
+gnn_depth: 1                   # Local branch depth
+top_patches: 32                # Top-k patches selected by BatchBranch
+topk: 2                        # Top-k value
+
+cbam_reduction: 16  # CBAM channel reduction ratio
+cbam_kernel: 7      # CBAM convolution kernel size
