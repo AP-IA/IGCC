@@ -147,9 +147,13 @@ def cal_loss(model, inputs, targets, criterions, amp_autocast, device, args):
 
     # Calculate Ranking Loss (PFE)
     if not args.NoPFE:
-        flags = torch.ones([self_scores.size(0), ]).to(device)
-        with amp_autocast:
-            PFE_loss = rank_criterion(self_scores, other_scores, flags)
+        if self_scores.numel() > 0:
+            flags = torch.ones_like(self_scores)
+            with amp_autocast:
+                PFE_loss = rank_criterion(self_scores, other_scores, flags)
+        else:
+            # No valid positive/negative comparison (for example, P=1).
+            PFE_loss = logits.sum() * 0.0
         loss += PFE_loss
         loss_dict.update({'PFE_loss': PFE_loss.item()})
 
@@ -157,9 +161,6 @@ def cal_loss(model, inputs, targets, criterions, amp_autocast, device, args):
     if dynamic_criterion:
         with amp_autocast:
             dynamic_loss = dynamic_criterion(inputs, [global_feature, decision_mask_list])
-        loss += dynamic_loss
-        loss_dict.update({'dynamic_loss': dynamic_loss.item()})
-
         loss += dynamic_loss
         loss_dict.update({'dynamic_loss': dynamic_loss.item()})
 

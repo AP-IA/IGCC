@@ -38,28 +38,26 @@ def get_pairs(embeddings, labels):
 
     distance_matrix = pdist(embeddings)
 
-    labels = labels.unsqueeze(dim=1)
+    labels = labels.to(embeddings.device).view(-1, 1)
     batch_size = embeddings.shape[0]
 
-    lb_eqs = (labels == torch.t(labels))
+    same_class = labels == labels.t()
+    positive_mask = same_class.clone()
+    positive_mask.fill_diagonal_(False)
+    negative_mask = ~same_class
 
-    dist_same = distance_matrix.clone()
-    lb_eqs_same = lb_eqs.fill_diagonal_(fill_value=False, wrap=False)
+    # A ranking comparison needs both a non-self positive and a true negative.
+    valid = positive_mask.any(dim=1) & negative_mask.any(dim=1)
+    anchors = torch.arange(batch_size, device=embeddings.device)[valid]
+    dist_same = distance_matrix[valid].masked_fill(~positive_mask[valid], float("inf"))
+    dist_diff = distance_matrix[valid].masked_fill(~negative_mask[valid], float("inf"))
+    intra_idxs = dist_same.argmin(dim=1)
+    inter_idxs = dist_diff.argmin(dim=1)
 
-    dist_same[lb_eqs_same == False] = float("inf")
-    intra_idxs = torch.argmin(dist_same, dim=1)
-
-    dist_diff = distance_matrix.clone()
-    dist_diff[lb_eqs == True] = float("inf")
-    inter_idxs = torch.argmin(dist_diff, dim=1)
-
-    intra_labels = torch.cat([labels[:], labels[intra_idxs]], dim=1)
-    inter_labels = torch.cat([labels[:], labels[inter_idxs]], dim=1)
-
-    intra_pairs = torch.cat(
-        [torch.arange(0, batch_size).unsqueeze(dim=1).to(embeddings.device), intra_idxs.unsqueeze(dim=1)], dim=1)
-    inter_pairs = torch.cat(
-        [torch.arange(0, batch_size).unsqueeze(dim=1).to(embeddings.device), inter_idxs.unsqueeze(dim=1)], dim=1)
+    intra_labels = torch.cat([labels[anchors], labels[intra_idxs]], dim=1)
+    inter_labels = torch.cat([labels[anchors], labels[inter_idxs]], dim=1)
+    intra_pairs = torch.stack([anchors, intra_idxs], dim=1)
+    inter_pairs = torch.stack([anchors, inter_idxs], dim=1)
 
     return intra_pairs, inter_pairs, intra_labels, inter_labels
 
@@ -68,6 +66,11 @@ def Pairwise_Feature_Enhancer(features, global_features, targets, feature_aligne
 
     with torch.no_grad():
         intra_pairs, inter_pairs, intra_labels, inter_labels = get_pairs(global_features, targets)
+
+    if intra_pairs.shape[0] == 0:
+        # Preserve a differentiable empty result; the caller skips ranking loss.
+        empty_scores = features[:0].sum(dim=1)
+        return empty_scores, empty_scores
 
     anchors = torch.cat([features[intra_pairs[:, 0]], features[inter_pairs[:, 0]]], dim=0)
     pairs = torch.cat([features[intra_pairs[:, 1]], features[inter_pairs[:, 1]]], dim=0)
@@ -87,7 +90,7 @@ def Pairwise_Feature_Enhancer(features, global_features, targets, feature_aligne
     target_labels = torch.cat([intra_labels[:, 0], inter_labels[:, 0]], dim=0)
 
     scores = softmax_layer(logits)
-    conf_scores = scores[torch.arange(scores.shape[0]), target_labels.to(torch.long)]
+    conf_scores = scores[torch.arange(scores.shape[0], device=scores.device), target_labels.to(torch.long)]
 
     score_intra = conf_scores[:num_intra]
     score_inter = conf_scores[num_intra:]
